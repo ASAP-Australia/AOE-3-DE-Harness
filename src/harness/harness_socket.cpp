@@ -14,10 +14,13 @@
 //   CLICK X Y                     — move + left button press+release
 //   SCREENSHOT PATH               — capture composite framebuffer to PNG at PATH
 //   SCREENSHOT_REGION X Y W H PATH — capture sub-region to PNG (logical 1920x1080 coords)
+//   PROBE_TAIL PATH               — subscribe: stream [LLP v=2] lines as "PROBE: <line>\n"
+//   PROBE_UNSUB                   — unsubscribe: harness emits "PROBE: EOF\n" then "OK\n"
 
 #include "harness_socket.h"
 #include "harness_capture.h"
 #include "harness_input.h"
+#include "harness_probe.h"
 
 #include "../main.hpp"
 #include "../log.hpp"
@@ -344,6 +347,40 @@ static void cmd_screenshot( int fd, const char *args )
     send_response( fd, buf );
 }
 
+static void cmd_probe_tail( int fd, const char *args,
+                             ProbeSubscription **pp_sub )
+{
+    // Trim leading whitespace.
+    while ( args && *args == ' ' ) ++args;
+
+    if ( !args || !*args )
+    {
+        send_response( fd, "ERR MISSING_ARG path\n" );
+        return;
+    }
+
+    // Stop any existing subscription on this connection first.
+    if ( *pp_sub )
+    {
+        probe_unsubscribe( *pp_sub );
+        *pp_sub = nullptr;
+    }
+
+    // Start new subscription — probe_subscribe sends OK SUBSCRIBED\n or ERR.
+    *pp_sub = probe_subscribe( fd, std::string( args ) );
+}
+
+static void cmd_probe_unsub( int fd, ProbeSubscription **pp_sub )
+{
+    if ( !*pp_sub )
+    {
+        send_response( fd, "ERR NO_ACTIVE_SUBSCRIPTION\n" );
+        return;
+    }
+    probe_unsubscribe( *pp_sub ); // sends PROBE: EOF\n then OK\n
+    *pp_sub = nullptr;
+}
+
 // ---------------------------------------------------------------------------
 // Per-connection handler — called synchronously from the accept loop.
 // Returns when the client disconnects or sends QUIT.
@@ -360,6 +397,9 @@ static void handle_client( int conn_fd )
         else
             s_harness_log.warnf( "SO_PEERCRED failed: %s", strerror( errno ) );
     }
+
+    // Active PROBE_TAIL subscription for this connection (if any).
+    ProbeSubscription *p_probe = nullptr;
 
     // Read lines from the client into a fixed-size buffer.
     // We do not use getline() to avoid unbounded heap allocation.
@@ -458,6 +498,14 @@ static void handle_client( int conn_fd )
                     {
                         cmd_screenshot_region( conn_fd, args );
                     }
+                    else if ( strcmp( verb, "PROBE_TAIL" ) == 0 )
+                    {
+                        cmd_probe_tail( conn_fd, args, &p_probe );
+                    }
+                    else if ( strcmp( verb, "PROBE_UNSUB" ) == 0 )
+                    {
+                        cmd_probe_unsub( conn_fd, &p_probe );
+                    }
                     else
                     {
                         char errbuf[256];
@@ -489,6 +537,9 @@ static void handle_client( int conn_fd )
     }
 
 disconnect:
+    // Stop any active probe tail thread before closing the fd.
+    probe_disconnect( p_probe );
+    p_probe = nullptr;
     close( conn_fd );
     s_harness_log.infof( "client fd closed" );
 }
