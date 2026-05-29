@@ -433,12 +433,12 @@ disconnect:
 }
 
 // ---------------------------------------------------------------------------
-// Accept loop — runs on the gs-harness thread.
+// Accept loop — runs on the aoe3de-harness thread.
 // ---------------------------------------------------------------------------
 
 static void *harness_thread_func( void * )
 {
-    pthread_setname_np( pthread_self(), "gs-harness" );
+    pthread_setname_np( pthread_self(), "aoe3de-harness" );
 
     s_harness_log.infof( "listening on %s", s_socketPath.c_str() );
 

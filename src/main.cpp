@@ -288,7 +288,7 @@ const char usage[] =
 #if HAVE_HARNESS
 	"Harness options (ANW AI agent control socket):\n"
 	"  --harness-mode                 Enable the harness Unix-domain control socket.\n"
-	"  --harness-socket <path>        Path for the control socket (default: $XDG_RUNTIME_DIR/gamescope-anw.sock).\n"
+	"  --harness-socket <path>        Path for the control socket (default: $XDG_RUNTIME_DIR/AOE3DEHarness.sock).\n"
 	"\n"
 #endif
 	"Keyboard shortcuts:\n"
@@ -1072,8 +1072,8 @@ int main(int argc, char **argv)
 		{
 			const char *pXDG = getenv( "XDG_RUNTIME_DIR" );
 			g_sHarnessSocketPath = pXDG
-				? std::string( pXDG ) + "/gamescope-anw.sock"
-				: "/tmp/gamescope-anw.sock";
+				? std::string( pXDG ) + "/AOE3DEHarness.sock"
+				: "/tmp/AOE3DEHarness.sock";
 		}
 		gamescope::Harness::StartHarnessSocket( g_sHarnessSocketPath );
 	}

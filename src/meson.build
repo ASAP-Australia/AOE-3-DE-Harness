@@ -196,7 +196,7 @@ gamescope_version = configure_file(
 )
 
   executable(
-    'gamescope',
+    'AOE3DEHarness',
     src, reshade_src, gamescope_version,
     include_directories : [reshade_include, sol2_include],
     dependencies: [

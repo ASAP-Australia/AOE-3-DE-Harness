@@ -8,16 +8,16 @@
 // any in-Wine instrumentation.
 //
 // All public functions are safe to call from any thread. The implementation
-// serialises all command handling on the gs-harness thread.
+// serialises all command handling on the aoe3de-harness thread.
 
 namespace gamescope::Harness
 {
 
-// Spawn the gs-harness thread, unlink any stale socket file, bind, and start
+// Spawn the aoe3de-harness thread, unlink any stale socket file, bind, and start
 // accepting connections. No-op if called twice.
 void StartHarnessSocket( const std::string &socketPath );
 
-// Signal the gs-harness thread to stop and wait for it to exit. Closes the
+// Signal the aoe3de-harness thread to stop and wait for it to exit. Closes the
 // listen socket and removes the socket file.
 void StopHarnessSocket();
 
