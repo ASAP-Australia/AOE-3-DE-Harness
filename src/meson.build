@@ -163,6 +163,7 @@ if get_option('harness').enabled()
   src += 'harness/harness_input.cpp'
   src += 'harness/harness_capture.cpp'
   src += 'harness/harness_probe.cpp'
+  src += 'harness/harness_watchdog.cpp'
 endif
 
 if pipewire_dep.found()

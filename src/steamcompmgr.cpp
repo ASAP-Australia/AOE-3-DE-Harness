@@ -113,6 +113,10 @@ static const int g_nBaseCursorScale = 36;
 #include "pipewire.hpp"
 #endif
 
+#if HAVE_HARNESS
+#include "harness/harness_watchdog.h"
+#endif
+
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stb_image.h>
@@ -8303,6 +8307,12 @@ void LaunchNestedChildren( char **ppPrimaryChildArgv )
 	if ( ppPrimaryChildArgv && *ppPrimaryChildArgv )
 	{
 		pid_t nPrimaryChildPid = gamescope::Process::SpawnProcessInWatchdog( ppPrimaryChildArgv, false );
+
+#if HAVE_HARNESS
+		// Register the inner command with the harness watchdog so that
+		// WATCHDOG_ENABLE can re-spawn it on crash.
+		gamescope::Harness::HarnessWatchdogSetInnerCommand( ppPrimaryChildArgv, nPrimaryChildPid );
+#endif
 
 		std::thread waitThread([ nPrimaryChildPid ]()
 		{

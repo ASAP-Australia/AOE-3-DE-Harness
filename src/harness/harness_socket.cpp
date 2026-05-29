@@ -16,11 +16,15 @@
 //   SCREENSHOT_REGION X Y W H PATH — capture sub-region to PNG (logical 1920x1080 coords)
 //   PROBE_TAIL PATH               — subscribe: stream [LLP v=2] lines as "PROBE: <line>\n"
 //   PROBE_UNSUB                   — unsubscribe: harness emits "PROBE: EOF\n" then "OK\n"
+//   WATCHDOG_ENABLE <max> <delay> — arm auto-restart; max=max_restarts, delay=ms between restarts
+//   WATCHDOG_DISABLE              — disarm watchdog
+//   WATCHDOG_STATUS               — query current watchdog state
 
 #include "harness_socket.h"
 #include "harness_capture.h"
 #include "harness_input.h"
 #include "harness_probe.h"
+#include "harness_watchdog.h"
 
 #include "../main.hpp"
 #include "../log.hpp"
@@ -31,9 +35,11 @@
 #include <climits> // PATH_MAX — GCC 16+ no longer transitively pulls it in
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <pthread.h>
 #include <string>
 #include <unistd.h>
+#include <vector>
 
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -55,6 +61,50 @@ static std::atomic<bool> s_bRunning{ false };
 static int               s_nListenFd = -1;
 static pthread_t         s_thread;
 static std::string       s_socketPath;
+
+// ---------------------------------------------------------------------------
+// PROBE_TAIL subscriber list — used by HarnessWatchdogBroadcast()
+// Each entry is an open client fd that has an active PROBE_TAIL subscription.
+// We piggyback on the subscriber fd to deliver WATCHDOG: events.
+// ---------------------------------------------------------------------------
+
+static std::mutex          s_probe_fd_mutex;
+static std::vector<int>    s_probe_fds; // fds with active probe subscriptions
+
+// Called from harness_probe.cpp indirectly — we track the fd separately.
+// Register/unregister are called from cmd_probe_tail / cmd_probe_unsub.
+static void probe_fd_register( int fd )
+{
+    std::lock_guard<std::mutex> lk( s_probe_fd_mutex );
+    s_probe_fds.push_back( fd );
+}
+
+static void probe_fd_unregister( int fd )
+{
+    std::lock_guard<std::mutex> lk( s_probe_fd_mutex );
+    s_probe_fds.erase(
+        std::remove( s_probe_fds.begin(), s_probe_fds.end(), fd ),
+        s_probe_fds.end() );
+}
+
+// Broadcast a WATCHDOG: line to all PROBE_TAIL subscribers.
+// Callers pass the suffix only (e.g. "RESTART 2", "EXHAUSTED") — this function
+// prepends "WATCHDOG: " and appends "\n".
+// Defined here (and declared in harness_watchdog.h) so it can reach s_probe_fds.
+void HarnessWatchdogBroadcast( const char *line )
+{
+    char buf[256];
+    int n = snprintf( buf, sizeof( buf ), "WATCHDOG: %s\n", line );
+    if ( n <= 0 )
+        return;
+
+    std::lock_guard<std::mutex> lk( s_probe_fd_mutex );
+    for ( int fd : s_probe_fds )
+    {
+        if ( fd >= 0 )
+            send( fd, buf, (size_t)n, MSG_DONTWAIT );
+    }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -367,12 +417,15 @@ static void cmd_probe_tail( int fd, const char *args,
     // Stop any existing subscription on this connection first.
     if ( *pp_sub )
     {
+        probe_fd_unregister( fd );
         probe_unsubscribe( *pp_sub );
         *pp_sub = nullptr;
     }
 
     // Start new subscription — probe_subscribe sends OK SUBSCRIBED\n or ERR.
     *pp_sub = probe_subscribe( fd, std::string( args ) );
+    if ( *pp_sub )
+        probe_fd_register( fd );
 }
 
 static void cmd_probe_unsub( int fd, ProbeSubscription **pp_sub )
@@ -382,8 +435,48 @@ static void cmd_probe_unsub( int fd, ProbeSubscription **pp_sub )
         send_response( fd, "ERR NO_ACTIVE_SUBSCRIPTION\n" );
         return;
     }
+    probe_fd_unregister( fd );
     probe_unsubscribe( *pp_sub ); // sends PROBE: EOF\n then OK\n
     *pp_sub = nullptr;
+}
+
+static void cmd_watchdog_enable( int fd, const char *args )
+{
+    if ( !args || !*args )
+    {
+        send_response( fd, "ERR MISSING_ARGS max_restarts restart_delay_ms\n" );
+        return;
+    }
+    int max_restarts = 0, delay_ms = 0;
+    if ( sscanf( args, "%d %d", &max_restarts, &delay_ms ) != 2 )
+    {
+        send_response( fd, "ERR BAD_FORMAT expected: <max_restarts> <restart_delay_ms>\n" );
+        return;
+    }
+    if ( max_restarts < 0 || delay_ms < 0 )
+    {
+        send_response( fd, "ERR NEGATIVE_ARG\n" );
+        return;
+    }
+    HarnessWatchdogEnable( max_restarts, delay_ms );
+    send_response( fd, "OK\n" );
+}
+
+static void cmd_watchdog_disable( int fd )
+{
+    HarnessWatchdogDisable();
+    send_response( fd, "OK\n" );
+}
+
+static void cmd_watchdog_status( int fd )
+{
+    int enabled = 0, used = 0, remaining = 0, last_exit = -1;
+    HarnessWatchdogStatus( &enabled, &used, &remaining, &last_exit );
+    char buf[256];
+    snprintf( buf, sizeof( buf ),
+              "OK enabled=%d restarts_used=%d restarts_remaining=%d last_exit_code=%d\n",
+              enabled, used, remaining, last_exit );
+    send_response( fd, buf );
 }
 
 // ---------------------------------------------------------------------------
@@ -511,6 +604,18 @@ static void handle_client( int conn_fd )
                     {
                         cmd_probe_unsub( conn_fd, &p_probe );
                     }
+                    else if ( strcmp( verb, "WATCHDOG_ENABLE" ) == 0 )
+                    {
+                        cmd_watchdog_enable( conn_fd, args );
+                    }
+                    else if ( strcmp( verb, "WATCHDOG_DISABLE" ) == 0 )
+                    {
+                        cmd_watchdog_disable( conn_fd );
+                    }
+                    else if ( strcmp( verb, "WATCHDOG_STATUS" ) == 0 )
+                    {
+                        cmd_watchdog_status( conn_fd );
+                    }
                     else
                     {
                         char errbuf[256];
@@ -543,6 +648,7 @@ static void handle_client( int conn_fd )
 
 disconnect:
     // Stop any active probe tail thread before closing the fd.
+    probe_fd_unregister( conn_fd );
     probe_disconnect( p_probe );
     p_probe = nullptr;
     close( conn_fd );
@@ -652,7 +758,11 @@ void StartHarnessSocket( const std::string &socketPath )
         close( fd );
         s_nListenFd = -1;
         unlink( socketPath.c_str() );
+        return;
     }
+
+    // Start the watchdog poll thread (opt-in via WATCHDOG_ENABLE socket command).
+    HarnessWatchdogStart();
 }
 
 void StopHarnessSocket()
@@ -661,6 +771,9 @@ void StopHarnessSocket()
         return;
 
     s_bRunning.store( false, std::memory_order_release );
+
+    // Stop the watchdog poll thread before closing fds.
+    HarnessWatchdogStop();
 
     // Unblock any in-flight capture_to_path() call so the harness thread
     // is not stuck waiting on the screenshot future when we try to join it.
