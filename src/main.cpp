@@ -163,8 +163,9 @@ const struct option *gamescope_options = (struct option[]){
 	{ "keep-alive", no_argument, nullptr, 0 },
 
 #if HAVE_HARNESS
-	{ "harness-mode",   no_argument,       nullptr, 0 },
-	{ "harness-socket", required_argument, nullptr, 0 },
+	{ "harness-mode",      no_argument,       nullptr, 0 },
+	{ "harness-socket",    required_argument, nullptr, 0 },
+	{ "harness-headless",  no_argument,       nullptr, 0 },
 #endif
 
 	{} // keep last
@@ -289,6 +290,8 @@ const char usage[] =
 	"Harness options (ANW AI agent control socket):\n"
 	"  --harness-mode                 Enable the harness Unix-domain control socket.\n"
 	"  --harness-socket <path>        Path for the control socket (default: $XDG_RUNTIME_DIR/AOE3DEHarness.sock).\n"
+	"  --harness-headless             Convenience alias: headless backend + 1x1 output + harness socket.\n"
+	"                                 Equivalent to: --backend headless -W 1 -H 1 --harness-mode\n"
 	"\n"
 #endif
 	"Keyboard shortcuts:\n"
@@ -863,6 +866,16 @@ int main(int argc, char **argv)
 					g_bHarnessMode = true;
 				} else if (strcmp(opt_name, "harness-socket") == 0) {
 					g_sHarnessSocketPath = optarg;
+				} else if (strcmp(opt_name, "harness-headless") == 0) {
+					// Convenience alias: force headless backend + 1x1 output +
+					// harness mode.  Useful for CI smoke tests with no display.
+					eCurrentBackend = gamescope::GamescopeBackend::Headless;
+					g_nNestedWidth           = 1;
+					g_nNestedHeight          = 1;
+					g_nPreferredOutputWidth  = 1;
+					g_nPreferredOutputHeight = 1;
+					g_bHarnessMode = true;
+					fprintf( stderr, "harness-headless: headless backend, 1x1 output, harness mode enabled\n" );
 #endif
 				}
 				break;
