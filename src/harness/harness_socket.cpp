@@ -5,15 +5,17 @@
 // Response: OK [data]\n  |  ERR REASON\n
 //
 // Commands handled here:
-//   STATE        — returns pid, uptime_ms, internal_w, internal_h
-//   QUIT         — closes the current client connection cleanly
-//   KEY_DOWN VK  — press key (Win32 VK hex, e.g. 0x70)
-//   KEY_UP VK    — release key
-//   KEY VK       — press+release
-//   MOVE X Y     — absolute pointer warp
-//   CLICK X Y    — move + left button press+release
+//   STATE            — returns pid, uptime_ms, internal_w, internal_h
+//   QUIT             — closes the current client connection cleanly
+//   KEY_DOWN VK      — press key (Win32 VK hex, e.g. 0x70)
+//   KEY_UP VK        — release key
+//   KEY VK           — press+release
+//   MOVE X Y         — absolute pointer warp
+//   CLICK X Y        — move + left button press+release
+//   SCREENSHOT PATH  — capture composite framebuffer to PNG at PATH
 
 #include "harness_socket.h"
+#include "harness_capture.h"
 #include "harness_input.h"
 
 #include "../main.hpp"
@@ -242,6 +244,49 @@ static void cmd_click( int fd, const char *args )
     send_response( fd, "OK\n" );
 }
 
+static void cmd_screenshot( int fd, const char *args )
+{
+    if ( !args || !*args )
+    {
+        send_response( fd, "ERR INVALID_PATH missing_argument\n" );
+        return;
+    }
+
+    // Trim leading whitespace from the path argument.
+    while ( *args == ' ' ) ++args;
+
+    if ( !*args )
+    {
+        send_response( fd, "ERR INVALID_PATH empty_path\n" );
+        return;
+    }
+
+    ScreenshotOutcome out = capture_to_path( std::string( args ) );
+
+    char buf[PATH_MAX + 128];
+    switch ( out.result )
+    {
+    case ScreenshotResult::Ok:
+        snprintf( buf, sizeof( buf ), "OK %s %zu\n",
+                  out.path.c_str(), out.bytes_written );
+        break;
+    case ScreenshotResult::Timeout:
+        snprintf( buf, sizeof( buf ), "ERR SCREENSHOT_TIMEOUT\n" );
+        break;
+    case ScreenshotResult::Failed:
+        snprintf( buf, sizeof( buf ), "ERR SCREENSHOT_FAILED\n" );
+        break;
+    case ScreenshotResult::InvalidPath:
+        snprintf( buf, sizeof( buf ), "ERR INVALID_PATH %s\n",
+                  out.error_detail.c_str() );
+        break;
+    case ScreenshotResult::ShuttingDown:
+        snprintf( buf, sizeof( buf ), "ERR HARNESS_SHUTTING_DOWN\n" );
+        break;
+    }
+    send_response( fd, buf );
+}
+
 // ---------------------------------------------------------------------------
 // Per-connection handler — called synchronously from the accept loop.
 // Returns when the client disconnects or sends QUIT.
@@ -347,6 +392,10 @@ static void handle_client( int conn_fd )
                     else if ( strcmp( verb, "CLICK" ) == 0 )
                     {
                         cmd_click( conn_fd, args );
+                    }
+                    else if ( strcmp( verb, "SCREENSHOT" ) == 0 )
+                    {
+                        cmd_screenshot( conn_fd, args );
                     }
                     else
                     {
@@ -495,6 +544,10 @@ void StopHarnessSocket()
         return;
 
     s_bRunning.store( false, std::memory_order_release );
+
+    // Unblock any in-flight capture_to_path() call so the harness thread
+    // is not stuck waiting on the screenshot future when we try to join it.
+    signal_shutdown();
 
     // Closing the listen fd causes accept4() to return EBADF / error,
     // unblocking the thread.

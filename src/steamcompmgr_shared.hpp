@@ -1,5 +1,7 @@
 #pragma once
 
+#include <future>
+#include <memory>
 #include <variant>
 #include <string>
 #include <utility>
@@ -279,6 +281,12 @@ namespace gamescope
 		uint32_t uScreenshotFlags = 0;
 		bool bX11PropertyRequested = false;
 		bool bWaylandRequested = false;
+
+		// Optional completion signal for synchronous harness screenshots.
+		// nullptr for non-harness screenshots (Steam overlay, SIGUSR2, etc.) —
+		// preserves existing semantics. When non-null, set_value(true/false) is
+		// called in the screenshotThread after the file write attempt.
+		std::shared_ptr<std::promise<bool>> pCompletionPromise = nullptr;
 	};
 
 	class CScreenshotManager

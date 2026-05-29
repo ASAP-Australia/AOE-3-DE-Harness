@@ -161,6 +161,7 @@ src += protocols_client_src
 if get_option('harness').enabled()
   src += 'harness/harness_socket.cpp'
   src += 'harness/harness_input.cpp'
+  src += 'harness/harness_capture.cpp'
 endif
 
 if pipewire_dep.found()

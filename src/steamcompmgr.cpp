@@ -2930,6 +2930,10 @@ paint_all( global_focus_t *pFocus, bool async )
 			if ( !oScreenshotSeq )
 			{
 				xwm_log.errorf("vulkan_screenshot failed");
+				// Signal harness completion promise with failure.
+				// -fno-exceptions: call set_value() directly — single-set by design.
+				if ( oScreenshotInfo->pCompletionPromise )
+					oScreenshotInfo->pCompletionPromise->set_value( false );
 				return;
 			}
 
@@ -2971,6 +2975,23 @@ paint_all( global_focus_t *pFocus, bool async )
 				const uint8_t *mappedData = pScreenshotTexture->mappedData();
 
 				bool bScreenshotSuccess = false;
+
+				// RAII guard: signal the harness completion promise on all exit
+				// paths (including early returns deep in the format branches).
+				// Non-harness screenshots have pCompletionPromise == nullptr —
+				// the guard is a no-op for them.
+				// Note: gamescope is built with -fno-exceptions, so no try/catch.
+				// set_value() is called at most once per request by design.
+				struct PromiseGuard
+				{
+					const gamescope::GamescopeScreenshotInfo *info;
+					const bool &success;
+					~PromiseGuard()
+					{
+						if ( info->pCompletionPromise )
+							info->pCompletionPromise->set_value( success );
+					}
+				} promiseGuard{ &*oScreenshotInfo, bScreenshotSuccess };
 
 				if ( pScreenshotTexture->format() == VK_FORMAT_A2R10G10B10_UNORM_PACK32 )
 				{
@@ -3153,6 +3174,10 @@ paint_all( global_focus_t *pFocus, bool async )
 				XDeleteProperty( root_ctx->dpy, root_ctx->root, root_ctx->atoms.gamescopeScreenShotAtom );
 				XDeleteProperty( root_ctx->dpy, root_ctx->root, root_ctx->atoms.gamescopeDebugScreenShotAtom );
 			}
+			// Signal harness completion promise with failure if one is set.
+			// -fno-exceptions: call set_value() directly — single-set by design.
+			if ( oScreenshotInfo->pCompletionPromise )
+				oScreenshotInfo->pCompletionPromise->set_value( false );
 		}
 	}
 
