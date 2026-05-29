@@ -1,90 +1,115 @@
-## gamescope: the micro-compositor formerly known as steamcompmgr
+# AOE3DEHarness
 
-In an embedded session usecase, gamescope does the same thing as steamcompmgr, but with less extra copies and latency:
+AOE3DEHarness is a fork of [gamescope](https://github.com/ValveSoftware/gamescope) that adds a
+Unix-domain control socket for cursor-free automated testing of the
+**Age of Empires III: Definitive Edition "A New World"** mod.
 
- - It's getting game frames through Wayland by way of Xwayland, so there's no copy within X itself before it gets the frame.
- - It can use DRM/KMS to directly flip game frames to the screen, even when stretching or when notifications are up, removing another copy.
- - When it does need to composite with the GPU, it does so with async Vulkan compute, meaning you get to see your frame quick even if the game already has the GPU busy with the next frame.
+## Install via AppImage (recommended)
 
-It also runs on top of a regular desktop, the 'nested' usecase steamcompmgr didn't support.
-
- - Because the game is running in its own personal Xwayland sandbox desktop, it can't interfere with your desktop and your desktop can't interfere with it.
- - You can spoof a virtual screen with a desired resolution and refresh rate as the only thing the game sees, and control/resize the output as needed. This can be useful in exotic display configurations like ultrawide or multi-monitor setups that involve rotation.
-
-It runs on Mesa + AMD or Intel, and could be made to run on other Mesa/DRM drivers with minimal work. AMD requires Mesa 20.3+, Intel requires Mesa 21.2+. For NVIDIA's proprietary driver, version 515.43.04+ is required (make sure the `nvidia-drm.modeset=1` kernel parameter is set).
-
-If running RadeonSI clients with older cards (GFX8 and below), currently have to set `R600_DEBUG=nodcc`, or corruption will be observed until the stack picks up DRM modifiers support.
-
-## Building
-
-```
-git submodule update --init
-meson setup build/
-ninja -C build/
-build/src/gamescope -- <game>
+```bash
+wget https://github.com/ASAP-Australia/AOE3-DE-Harness/releases/latest/download/AOE3DEHarness-x86_64.AppImage
+chmod +x AOE3DEHarness-x86_64.AppImage
+sudo mv AOE3DEHarness-x86_64.AppImage /usr/local/bin/AOE3DEHarness
 ```
 
-Install with:
+Then in Steam, set the launch options for AoE3 DE to:
 
 ```
-meson install -C build/ --skip-subprojects
+AOE3DEHarness -- %command%
 ```
+
+The AppImage bundles all non-standard libraries (`libdisplay-info`, `libeis`,
+`libavif`, `librav1e`, `libdav1d`, `libvmaf`, etc.) so it runs on any
+x86_64 Linux with glibc 2.17+ (Ubuntu 20.04 LTS, Fedora 38+, SteamOS 3+,
+Bazzite).
+
+---
+
+## About gamescope
+
+In an embedded session use case, gamescope does the same thing as steamcompmgr,
+but with less extra copies and latency:
+
+ - It gets game frames through Wayland via Xwayland, so there is no copy
+   within X itself before it gets the frame.
+ - It can use DRM/KMS to directly flip game frames to the screen, even when
+   stretching or when notifications are up, removing another copy.
+ - When it does need to composite with the GPU, it does so with async Vulkan
+   compute, meaning you see your frame quickly even if the game already has
+   the GPU busy with the next frame.
+
+It also runs on top of a regular desktop (nested mode).
+
+ - Because the game runs in its own Xwayland sandbox, it cannot interfere with
+   your desktop and your desktop cannot interfere with it.
+ - You can spoof a virtual screen with a desired resolution and refresh rate as
+   the only thing the game sees.
+
+Requires Mesa + AMD or Intel (Mesa 20.3+ / 21.2+ respectively). NVIDIA
+proprietary driver 515.43.04+ is supported (`nvidia-drm.modeset=1` required).
 
 ## Keyboard shortcuts
 
 * **Super + F** : Toggle fullscreen
-* **Super + N** : Toggle nearest neighbour filtering
+* **Super + N** : Toggle nearest-neighbour filtering
 * **Super + U** : Toggle FSR upscaling
 * **Super + Y** : Toggle NIS upscaling
 * **Super + I** : Increase FSR sharpness by 1
 * **Super + O** : Decrease FSR sharpness by 1
-* **Super + S** : Take screenshot (currently goes to `/tmp/gamescope_$DATE.png`)
+* **Super + S** : Take screenshot (writes to `/tmp/gamescope_$DATE.png`)
 * **Super + G** : Toggle keyboard grab
-
-## Examples
-
-On any X11 or Wayland desktop, you can set the Steam launch arguments of your game as follows:
-
-```sh
-# Upscale a 720p game to 1440p with integer scaling
-gamescope -h 720 -H 1440 -S integer -- %command%
-
-# Limit a vsynced game to 30 FPS
-gamescope -r 30 -- %command%
-
-# Run the game with custom output scaling
-gamescope -W 3440 -H 1440 -- %command%
-```
 
 ## Options
 
-See `gamescope --help` for a full list of options.
+See `AOE3DEHarness --help` for the full list.
 
-* `-W`, `-H`: set the resolution used by gamescope. Resizing the gamescope window will update these settings. Ignored in embedded mode. If `-H` is specified but `-W` isn't, a 16:9 aspect ratio is assumed. Defaults to 1280×720.
-* `-w`, `-h`: set the resolution used by the game. If `-h` is specified but `-w` isn't, a 16:9 aspect ratio is assumed. Defaults to the values specified in `-W` and `-H`.
-* `-r`: set a frame-rate limit for the game. Specified in frames per second. Defaults to unlimited.
-* `-o`: set a frame-rate limit for the game when unfocused. Specified in frames per second. Defaults to unlimited.
-* `-F fsr`: use AMD FidelityFX™ Super Resolution 1.0 for upscaling
-* `-F nis`: use NVIDIA Image Scaling v1.0.3 for upscaling
-* `-S integer`: use integer scaling.
-* `-S stretch`: use stretch scaling, the game will fill the window. (e.g. 4:3 to 16:9)
-* `-f`: create a full-screen window.
+* `-W`, `-H`: output resolution (window size on desktop; display size in embedded mode)
+* `-w`, `-h`: game resolution. Defaults to `-W`/`-H` values.
+* `-r`: frame-rate limit (fps). Default: unlimited.
+* `-o`: frame-rate limit when unfocused (fps). Default: unlimited.
+* `-F fsr`: AMD FidelityFX Super Resolution 1.0 upscaling
+* `-F nis`: NVIDIA Image Scaling v1.0.3 upscaling
+* `-S integer`: integer scaling
+* `-S stretch`: stretch scaling (fills the window)
+* `-f`: fullscreen window
+* `-b`: borderless window
 
 ## Reshade support
 
-Gamescope supports a subset of Reshade effects/shaders using the `--reshade-effect [path]` and `--reshade-technique-idx [idx]` command line parameters.
+AOE3DEHarness supports a subset of Reshade effects via `--reshade-effect [path]`
+and `--reshade-technique-idx [idx]`. This enables shader effects (CRT shaders,
+film grain, HDR histograms, etc.) on top of whatever is displayed, without
+hooking into the game process.
 
-This provides an easy way to do shader effects (ie. CRT shader, film grain, debugging HDR with histograms, etc) on top of whatever is being displayed in Gamescope without having to hook into the underlying process.
+Using Reshade increases latency. For simple transformations prefer the LUT/CTM
+path (`--look`), which runs in the DC on AMDGPU at scanout time.
 
-Uniform/shader options can be modified programmatically via the `gamescope-reshade` wayland interface. Otherwise, they will just use their initializer values.
+---
 
-Using Reshade effects will increase latency as there will be work performed on the general gfx + compute queue as opposed to only using the realtime async compute queue which can run in tandem with the game's gfx work.
+## Building from source
 
-Using Reshade effects is **highly discouraged** for doing simple transformations which can be achieved with LUTs/CTMs which are possible to do in the DC (Display Core) on AMDGPU at scanout time, or with the current regular async compute composite path.
-The looks system where you can specify your own 3D LUTs would be a better alternative for such transformations.
+For contributions or custom builds — see [packaging/appimage/README.md](packaging/appimage/README.md) for AppImage packaging details.
 
-Pull requests for improving Reshade compatibility support are appreciated.
+```bash
+git submodule update --init
+meson setup build-f44/ \
+    -Dharness=enabled \
+    -Denable_gamescope_wsi_layer=false \
+    --buildtype=release \
+    -Db_lto=false
+ninja -C build-f44/
+# Binary: build-f44/src/AOE3DEHarness
+```
 
-## Status of Gamescope Packages
+Required packages (Fedora 44 / Bazzite):
 
-[![Packaging status](https://repology.org/badge/vertical-allrepos/gamescope.svg?exclude_unsupported=1)](https://repology.org/project/gamescope/versions)
+```
+dnf install meson ninja-build gcc-c++ glslang libcap-devel SDL2-devel \
+    vulkan-headers vulkan-loader-devel libX11-devel libXmu-devel \
+    libXcomposite-devel libXrender-devel libXres-devel libXtst-devel \
+    libxkbcommon-devel libdrm-devel libinput-devel \
+    wayland-devel wayland-protocols-devel xorg-x11-server-Xwayland \
+    pipewire-devel cmake libavif-devel libdecor-devel libeis-devel \
+    luajit-devel lua-devel libseat-devel libyuv-devel \
+    libdisplay-info-devel aom-devel rav1e-devel dav1d-devel libvmaf-devel
+```
