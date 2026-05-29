@@ -872,6 +872,28 @@ int main(int argc, char **argv)
 		}
 	}
 
+	// AOE3DE harness hardcoded defaults — see commit log for rationale.
+	// The AOE3DEHarness binary always runs in harness mode with these settings;
+	// CLI flags can still override individual values for testing.
+#if HAVE_HARNESS
+	g_bHarnessMode = true;
+
+	if ( g_sHarnessSocketPath.empty() )
+		g_sHarnessSocketPath = "/tmp/AOE3DEHarness.sock";
+#endif
+
+	if ( g_nNestedWidth == 0 )
+		g_nNestedWidth = 1920;
+	if ( g_nNestedHeight == 0 )
+		g_nNestedHeight = 1080;
+
+	if ( g_nPreferredOutputWidth == 0 )
+		g_nPreferredOutputWidth = 1920;
+	if ( g_nPreferredOutputHeight == 0 )
+		g_nPreferredOutputHeight = 1080;
+
+	g_bBorderlessOutputWindow = true;
+
 	if ( gamescope::Process::HasCapSysNice() )
 	{
 		gamescope::Process::SetNice( -20 );
