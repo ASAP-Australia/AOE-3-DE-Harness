@@ -95,18 +95,17 @@ static void *watchdog_thread_func( void * )
             pid = s_pid;
         }
 
-        int rc = kill( pid, 0 );
-        if ( rc == 0 )
-            continue; // still alive
-
-        if ( rc < 0 && errno == EPERM )
-            continue; // process exists but we can't signal it — treat as alive
-
-        // Process is gone (errno == ESRCH).
-        // Harvest the exit code with waitpid (non-blocking, best-effort).
+        // Use waitpid(WNOHANG) as the primary death detector.  This correctly
+        // harvests zombie children that kill(pid,0) would report as alive.
         int wstatus = 0;
+        pid_t wr = waitpid( pid, &wstatus, WNOHANG );
+        if ( wr == 0 )
+            continue; // still running
+
+        // wr < 0 (ECHILD: not our child, already reaped) or wr == pid (exited).
+        // In either case the child is gone.
         int exit_code = -1;
-        if ( waitpid( pid, &wstatus, WNOHANG ) > 0 )
+        if ( wr == pid )
         {
             if ( WIFEXITED( wstatus ) )
                 exit_code = WEXITSTATUS( wstatus );

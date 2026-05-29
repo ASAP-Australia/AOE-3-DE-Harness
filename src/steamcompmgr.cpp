@@ -8322,7 +8322,19 @@ void LaunchNestedChildren( char **ppPrimaryChildArgv )
 			s_LaunchLogScope.infof( "Primary child shut down!" );
 
 			if ( cv_shutdown_on_primary_child_death )
+			{
+#if HAVE_HARNESS
+				// If the harness watchdog is active, it will re-spawn the inner
+				// command — do not shut down gamescope on first child death.
+				int wd_enabled = 0, wd_used = 0, wd_remaining = 0, wd_exit = 0;
+				gamescope::Harness::HarnessWatchdogStatus( &wd_enabled, &wd_used,
+				                                           &wd_remaining, &wd_exit );
+				if ( !wd_enabled )
+					ShutdownGamescope();
+#else
 				ShutdownGamescope();
+#endif
+			}
 		});
 		waitThread.detach();
 	}
