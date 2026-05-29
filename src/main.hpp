@@ -73,3 +73,9 @@ extern int g_nXWaylandCount;
 extern uint32_t g_preferVendorID;
 extern uint32_t g_preferDeviceID;
 
+#if HAVE_HARNESS
+#include <string>
+extern bool g_bHarnessMode;
+extern std::string g_sHarnessSocketPath;
+#endif
+

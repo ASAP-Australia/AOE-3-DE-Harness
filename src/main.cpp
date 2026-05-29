@@ -40,6 +40,10 @@
 #include "pipewire.hpp"
 #endif
 
+#if HAVE_HARNESS
+#include "harness/harness_socket.h"
+#endif
+
 #include <wayland-client.h>
 
 using namespace std::literals;
@@ -157,6 +161,11 @@ const struct option *gamescope_options = (struct option[]){
 
 	{ "allow-deferred-backend", no_argument, nullptr, 0 },
 	{ "keep-alive", no_argument, nullptr, 0 },
+
+#if HAVE_HARNESS
+	{ "harness-mode",   no_argument,       nullptr, 0 },
+	{ "harness-socket", required_argument, nullptr, 0 },
+#endif
 
 	{} // keep last
 };
@@ -276,6 +285,12 @@ const char usage[] =
 	"  --allow-deferred-backend       Allows initting the backend in a deferred way, if it doesn't work immediately. (Note: This has some very minor correctness compromises that you should consider wrt. your platform with modifiers, etc).\n"
 	"  --keep-alive                   Keep Gamescope alive even when the primary process has died.\n"
 	"\n"
+#if HAVE_HARNESS
+	"Harness options (ANW AI agent control socket):\n"
+	"  --harness-mode                 Enable the harness Unix-domain control socket.\n"
+	"  --harness-socket <path>        Path for the control socket (default: $XDG_RUNTIME_DIR/gamescope-anw.sock).\n"
+	"\n"
+#endif
 	"Keyboard shortcuts:\n"
 	"  Super + F                      toggle fullscreen\n"
 	"  Super + N                      toggle nearest neighbour filtering\n"
@@ -326,6 +341,11 @@ uint32_t g_preferVendorID = 0;
 uint32_t g_preferDeviceID = 0;
 
 pthread_t g_mainThread;
+
+#if HAVE_HARNESS
+bool g_bHarnessMode = false;
+std::string g_sHarnessSocketPath;
+#endif
 
 static void steamCompMgrThreadRun(int argc, char **argv);
 
@@ -835,9 +855,15 @@ int main(int argc, char **argv)
 						if ( optarg == gamescope::VirtualConnectorStrategyToString( eStrategy ) )
 						{
 							gamescope::cv_backend_virtual_connector_strategy = eStrategy;
-								
+
 						}
 					}
+#if HAVE_HARNESS
+				} else if (strcmp(opt_name, "harness-mode") == 0) {
+					g_bHarnessMode = true;
+				} else if (strcmp(opt_name, "harness-socket") == 0) {
+					g_sHarnessSocketPath = optarg;
+#endif
 				}
 				break;
 			case '?':
@@ -1039,6 +1065,20 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+#if HAVE_HARNESS
+	if ( g_bHarnessMode )
+	{
+		if ( g_sHarnessSocketPath.empty() )
+		{
+			const char *pXDG = getenv( "XDG_RUNTIME_DIR" );
+			g_sHarnessSocketPath = pXDG
+				? std::string( pXDG ) + "/gamescope-anw.sock"
+				: "/tmp/gamescope-anw.sock";
+		}
+		gamescope::Harness::StartHarnessSocket( g_sHarnessSocketPath );
+	}
+#endif
+
 	gamescope_xwayland_server_t *base_server = wlserver_get_xwayland_server(0);
 
 	setenv("DISPLAY", base_server->get_nested_display_name(), 1);
@@ -1085,6 +1125,11 @@ int main(int argc, char **argv)
 	wlserver_run();
 
 	steamCompMgrThread.join();
+
+#if HAVE_HARNESS
+	if ( g_bHarnessMode )
+		gamescope::Harness::StopHarnessSocket();
+#endif
 
 	gamescope::Process::KillAllChildren( getpid(), SIGTERM );
 	gamescope::Process::WaitForAllChildren();
