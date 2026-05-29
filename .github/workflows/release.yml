@@ -1,0 +1,85 @@
+name: Release AppImage
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-appimage:
+    name: Build and publish AppImage
+    runs-on: ubuntu-latest
+
+    container:
+      image: quay.io/fedora/fedora:44
+      options: --privileged
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf install -y \
+            git meson ninja-build gcc gcc-c++ clang \
+            glslang \
+            libcap-devel \
+            SDL2-devel \
+            vulkan-headers vulkan-loader-devel \
+            libX11-devel libXmu-devel libXcomposite-devel \
+            libXrender-devel libXres-devel libXtst-devel \
+            libXdamage-devel libXfixes-devel libXcursor-devel \
+            libXi-devel libXext-devel libXxf86vm-devel libXt-devel \
+            libxkbcommon-devel \
+            libdrm-devel \
+            libinput-devel \
+            wayland-devel wayland-protocols-devel \
+            benchmark-devel \
+            xorg-x11-server-Xwayland \
+            pipewire-devel \
+            cmake \
+            libavif-devel \
+            aom-devel rav1e-devel dav1d-devel libvmaf-devel \
+            libdecor-devel \
+            libeis-devel \
+            luajit-devel lua-devel \
+            libseat-devel \
+            libyuv-devel \
+            libdisplay-info-devel \
+            catch2-devel gcovr \
+            squashfs-tools fuse-libs \
+            python3 curl
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build AOE3DEHarness
+        run: |
+          export CC=gcc CXX=g++
+          meson setup build-f44/ \
+            -Dharness=enabled \
+            -Denable_gamescope_wsi_layer=false \
+            --buildtype=release \
+            -Db_lto=false
+          ninja -C build-f44/ AOE3DEHarness
+
+      - name: Build AppImage
+        run: |
+          REPO_ROOT="$(pwd)" \
+          BUILD_DIR="$(pwd)/build-f44" \
+          OUTPUT_DIR="$(pwd)" \
+          APPIMAGE_EXTRACT_AND_RUN=1 \
+          bash packaging/appimage/build_appimage.sh
+
+      - name: Verify AppImage
+        run: |
+          APPIMAGE_EXTRACT_AND_RUN=1 ./AOE3DEHarness-x86_64.AppImage --help | head -5
+
+      - name: Upload AppImage as release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: AOE3DEHarness-x86_64.AppImage
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
