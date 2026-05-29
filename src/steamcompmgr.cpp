@@ -3090,22 +3090,38 @@ paint_all( global_focus_t *pFocus, bool async )
 				}
 				else if (pScreenshotTexture->format() == VK_FORMAT_B8G8R8A8_UNORM)
 				{
-					// Make our own copy of the image to remove the alpha channel.
-					auto imageData = std::vector<uint8_t>(currentOutputWidth * currentOutputHeight * 4);
-					const uint32_t comp = 4;
-					const uint32_t pitch = currentOutputWidth * comp;
-					for (uint32_t y = 0; y < currentOutputHeight; y++)
+					// Determine the output rectangle: full frame or harness sub-region.
+					uint32_t outX = 0, outY = 0;
+					uint32_t outW = currentOutputWidth;
+					uint32_t outH = currentOutputHeight;
+					if ( oScreenshotInfo->oRegion.has_value() )
 					{
-						for (uint32_t x = 0; x < currentOutputWidth; x++)
+						outX = oScreenshotInfo->oRegion->x;
+						outY = oScreenshotInfo->oRegion->y;
+						outW = oScreenshotInfo->oRegion->w;
+						outH = oScreenshotInfo->oRegion->h;
+					}
+
+					// Make our own copy of the image to remove the alpha channel
+					// (and optionally crop to the requested region).
+					auto imageData = std::vector<uint8_t>( outW * outH * 4 );
+					const uint32_t comp = 4;
+					const uint32_t pitch = outW * comp;
+					const size_t srcRowPitch = pScreenshotTexture->rowPitch();
+					for (uint32_t row = 0; row < outH; row++)
+					{
+						for (uint32_t col = 0; col < outW; col++)
 						{
-							// BGR...
-							imageData[y * pitch + x * comp + 0] = mappedData[y * pScreenshotTexture->rowPitch() + x * comp + 2];
-							imageData[y * pitch + x * comp + 1] = mappedData[y * pScreenshotTexture->rowPitch() + x * comp + 1];
-							imageData[y * pitch + x * comp + 2] = mappedData[y * pScreenshotTexture->rowPitch() + x * comp + 0];
-							imageData[y * pitch + x * comp + 3] = 255;
+							// BGR source → RGBA dest
+							const uint8_t *src = &mappedData[(outY + row) * srcRowPitch + (outX + col) * comp];
+							uint8_t *dst = &imageData[row * pitch + col * comp];
+							dst[0] = src[2]; // R
+							dst[1] = src[1]; // G
+							dst[2] = src[0]; // B
+							dst[3] = 255;    // A
 						}
 					}
-					if ( stbi_write_png( oScreenshotInfo->szScreenshotPath.c_str(), currentOutputWidth, currentOutputHeight, 4, imageData.data(), pitch ) )
+					if ( stbi_write_png( oScreenshotInfo->szScreenshotPath.c_str(), (int)outW, (int)outH, 4, imageData.data(), (int)pitch ) )
 					{
 						xwm_log.infof( "Screenshot saved to %s", oScreenshotInfo->szScreenshotPath.c_str() );
 						bScreenshotSuccess = true;

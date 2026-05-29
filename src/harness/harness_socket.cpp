@@ -5,14 +5,15 @@
 // Response: OK [data]\n  |  ERR REASON\n
 //
 // Commands handled here:
-//   STATE            — returns pid, uptime_ms, internal_w, internal_h
-//   QUIT             — closes the current client connection cleanly
-//   KEY_DOWN VK      — press key (Win32 VK hex, e.g. 0x70)
-//   KEY_UP VK        — release key
-//   KEY VK           — press+release
-//   MOVE X Y         — absolute pointer warp
-//   CLICK X Y        — move + left button press+release
-//   SCREENSHOT PATH  — capture composite framebuffer to PNG at PATH
+//   STATE                         — returns pid, uptime_ms, internal_w, internal_h
+//   QUIT                          — closes the current client connection cleanly
+//   KEY_DOWN VK                   — press key (Win32 VK hex, e.g. 0x70)
+//   KEY_UP VK                     — release key
+//   KEY VK                        — press+release
+//   MOVE X Y                      — absolute pointer warp
+//   CLICK X Y                     — move + left button press+release
+//   SCREENSHOT PATH               — capture composite framebuffer to PNG at PATH
+//   SCREENSHOT_REGION X Y W H PATH — capture sub-region to PNG (logical 1920x1080 coords)
 
 #include "harness_socket.h"
 #include "harness_capture.h"
@@ -24,6 +25,7 @@
 
 #include <atomic>
 #include <cerrno>
+#include <climits> // PATH_MAX — GCC 16+ no longer transitively pulls it in
 #include <cstdio>
 #include <cstring>
 #include <pthread.h>
@@ -244,6 +246,61 @@ static void cmd_click( int fd, const char *args )
     send_response( fd, "OK\n" );
 }
 
+static void cmd_screenshot_region( int fd, const char *args )
+{
+    if ( !args || !*args )
+    {
+        send_response( fd, "ERR MISSING_ARGS x y w h path\n" );
+        return;
+    }
+
+    int x = 0, y = 0, w = 0, h = 0;
+    char path[PATH_MAX];
+    path[0] = '\0';
+
+    // Parse: "<x> <y> <w> <h> <path>"
+    if ( sscanf( args, "%d %d %d %d %4095s", &x, &y, &w, &h, path ) != 5 )
+    {
+        send_response( fd, "ERR BAD_FORMAT expected: x y w h path\n" );
+        return;
+    }
+
+    if ( x < 0 || y < 0 || w <= 0 || h <= 0 )
+    {
+        send_response( fd, "ERR INVALID_REGION negative_or_zero_dimension\n" );
+        return;
+    }
+
+    // Bounds checked further inside capture_region_to_path against g_nOutputWidth/Height.
+    ScreenshotOutcome out = capture_region_to_path(
+        std::string( path ),
+        (uint32_t)x, (uint32_t)y,
+        (uint32_t)w, (uint32_t)h );
+
+    char buf[PATH_MAX + 128];
+    switch ( out.result )
+    {
+    case ScreenshotResult::Ok:
+        snprintf( buf, sizeof( buf ), "OK %s %zu\n",
+                  out.path.c_str(), out.bytes_written );
+        break;
+    case ScreenshotResult::Timeout:
+        snprintf( buf, sizeof( buf ), "ERR SCREENSHOT_TIMEOUT\n" );
+        break;
+    case ScreenshotResult::Failed:
+        snprintf( buf, sizeof( buf ), "ERR SCREENSHOT_FAILED\n" );
+        break;
+    case ScreenshotResult::InvalidPath:
+        snprintf( buf, sizeof( buf ), "ERR INVALID_REGION %s\n",
+                  out.error_detail.c_str() );
+        break;
+    case ScreenshotResult::ShuttingDown:
+        snprintf( buf, sizeof( buf ), "ERR HARNESS_SHUTTING_DOWN\n" );
+        break;
+    }
+    send_response( fd, buf );
+}
+
 static void cmd_screenshot( int fd, const char *args )
 {
     if ( !args || !*args )
@@ -396,6 +453,10 @@ static void handle_client( int conn_fd )
                     else if ( strcmp( verb, "SCREENSHOT" ) == 0 )
                     {
                         cmd_screenshot( conn_fd, args );
+                    }
+                    else if ( strcmp( verb, "SCREENSHOT_REGION" ) == 0 )
+                    {
+                        cmd_screenshot_region( conn_fd, args );
                     }
                     else
                     {

@@ -2,6 +2,7 @@
 
 #include <future>
 #include <memory>
+#include <optional>
 #include <variant>
 #include <string>
 #include <utility>
@@ -274,6 +275,16 @@ extern std::atomic<bool> hasRepaint;
 
 namespace gamescope
 {
+	// Optional sub-region for harness SCREENSHOT_REGION command.
+	// Coordinates are in the logical 1920x1080 output space.
+	struct ScreenshotRegion
+	{
+		uint32_t x = 0;
+		uint32_t y = 0;
+		uint32_t w = 0;
+		uint32_t h = 0;
+	};
+
 	struct GamescopeScreenshotInfo
 	{
 		std::string szScreenshotPath;
@@ -287,6 +298,11 @@ namespace gamescope
 		// preserves existing semantics. When non-null, set_value(true/false) is
 		// called in the screenshotThread after the file write attempt.
 		std::shared_ptr<std::promise<bool>> pCompletionPromise = nullptr;
+
+		// Optional crop region for SCREENSHOT_REGION socket command.
+		// When present, only the specified rectangle is written to the PNG.
+		// When absent (nullopt), the full frame is written (existing behaviour).
+		std::optional<ScreenshotRegion> oRegion = std::nullopt;
 	};
 
 	class CScreenshotManager

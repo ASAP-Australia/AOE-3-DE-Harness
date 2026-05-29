@@ -6,6 +6,7 @@
 
 #include "../steamcompmgr_shared.hpp"
 #include "../steamcompmgr.hpp"   // nudge_steamcompmgr()
+#include "../main.hpp"           // g_nOutputWidth, g_nOutputHeight
 #include "../log.hpp"
 
 #include <atomic>
@@ -152,6 +153,79 @@ ScreenshotOutcome capture_to_path( const std::string &host_path )
 void signal_shutdown()
 {
     s_bShuttingDown.store( true, std::memory_order_release );
+}
+
+// ---------------------------------------------------------------------------
+// Region screenshot
+// ---------------------------------------------------------------------------
+
+ScreenshotOutcome capture_region_to_path( const std::string &host_path,
+                                          uint32_t x, uint32_t y,
+                                          uint32_t w, uint32_t h )
+{
+    // Fast path: already shutting down.
+    if ( s_bShuttingDown.load( std::memory_order_acquire ) )
+    {
+        return { ScreenshotResult::ShuttingDown, {}, 0,
+                 "harness is shutting down" };
+    }
+
+    // Bounds validation in logical coordinate space.
+    if ( w == 0 || h == 0 )
+        return { ScreenshotResult::InvalidPath, {}, 0, "INVALID_REGION w_or_h_is_zero" };
+    if ( (uint64_t)x + w > g_nOutputWidth || (uint64_t)y + h > g_nOutputHeight )
+        return { ScreenshotResult::InvalidPath, {}, 0, "INVALID_REGION out_of_bounds" };
+
+    // Validate the output path.
+    std::string path_err = validate_path( host_path );
+    if ( !path_err.empty() )
+        return { ScreenshotResult::InvalidPath, {}, 0, path_err };
+
+    // Build the promise/future pair.
+    auto pPromise = std::make_shared<std::promise<bool>>();
+    std::future<bool> future = pPromise->get_future();
+
+    // Enqueue with region.
+    gamescope::CScreenshotManager::Get().TakeScreenshot(
+        gamescope::GamescopeScreenshotInfo{
+            .szScreenshotPath      = host_path,
+            .eScreenshotType       = GAMESCOPE_CONTROL_SCREENSHOT_TYPE_FULL_COMPOSITION,
+            .uScreenshotFlags      = 0,
+            .bX11PropertyRequested = false,
+            .bWaylandRequested     = false,
+            .pCompletionPromise    = pPromise,
+            .oRegion               = gamescope::ScreenshotRegion{ x, y, w, h },
+        }
+    );
+
+    nudge_steamcompmgr();
+
+    auto status = future.wait_for( std::chrono::seconds( 5 ) );
+
+    if ( s_bShuttingDown.load( std::memory_order_acquire ) )
+        return { ScreenshotResult::ShuttingDown, {}, 0, "harness shut down during capture" };
+
+    if ( status == std::future_status::timeout )
+    {
+        s_cap_log.warnf( "SCREENSHOT_REGION timed out: %s", host_path.c_str() );
+        return { ScreenshotResult::Timeout, {}, 0, "compositor did not respond within 5s" };
+    }
+
+    bool bOk = future.get();
+    if ( !bOk )
+    {
+        s_cap_log.errorf( "CScreenshotManager reported failure for region screenshot: %s", host_path.c_str() );
+        return { ScreenshotResult::Failed, host_path, 0, "compositor write failed" };
+    }
+
+    struct stat fst{};
+    if ( stat( host_path.c_str(), &fst ) != 0 || fst.st_size <= 0 )
+    {
+        s_cap_log.errorf( "region screenshot file missing or zero-size: %s", host_path.c_str() );
+        return { ScreenshotResult::Failed, host_path, 0, "file missing or zero-size after write" };
+    }
+
+    return { ScreenshotResult::Ok, host_path, static_cast<size_t>( fst.st_size ), {} };
 }
 
 } // namespace gamescope::Harness
