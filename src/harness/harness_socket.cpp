@@ -5,7 +5,7 @@
 // Response: OK [data]\n  |  ERR REASON\n
 //
 // Commands handled here:
-//   STATE                         — returns pid, uptime_ms, internal_w, internal_h
+//   STATE                         — returns pid, uptime_ms, internal_w, internal_h, ready
 //   QUIT                          — closes the current client connection cleanly
 //   KEY_DOWN VK                   — press key (Win32 VK hex, e.g. 0x70)
 //   KEY_UP VK                     — release key
@@ -95,11 +95,16 @@ static const char *split_verb( char *line, const char **args_out )
 static void cmd_state( int fd )
 {
     unsigned int uptime_ms = get_time_in_milliseconds();
+    // focusWindow_pid is set (non-zero) by steamcompmgr once the inner game
+    // window has been mapped and has committed its first composited frame.
+    // ready=1 means "past splash / on the main menu"; ready=0 means no client
+    // window is compositing yet.
+    int ready = ( focusWindow_pid != 0 ) ? 1 : 0;
     char buf[256];
     snprintf( buf, sizeof( buf ),
-              "OK pid=%d uptime_ms=%u internal_w=%u internal_h=%u\n",
+              "OK pid=%d uptime_ms=%u internal_w=%u internal_h=%u ready=%d\n",
               (int)getpid(), uptime_ms,
-              g_nOutputWidth, g_nOutputHeight );
+              g_nOutputWidth, g_nOutputHeight, ready );
     send_response( fd, buf );
 }
 
