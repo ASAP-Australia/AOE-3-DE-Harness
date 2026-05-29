@@ -13,7 +13,6 @@ Stock gamescope is a general-purpose nested compositor. This fork adds harness-s
 - A Unix-domain control socket for in-process screenshot + input commands from a Python harness
 - Composite-framebuffer pixel readback (replacing the per-process DXGI hook)
 - libei-based input injection routed from the control socket
-- Headless-by-default operation when a `--harness-mode` flag is passed
 
 Stock gamescope behaviour is preserved when these flags are not used.
 

@@ -52,8 +52,8 @@ gamescope -h 720 -H 1440 -S integer -- %command%
 # Limit a vsynced game to 30 FPS
 gamescope -r 30 -- %command%
 
-# Run the game at 1080p, but scale output to a fullscreen 3440×1440 pillarboxed ultrawide window
-gamescope -w 1920 -h 1080 -W 3440 -H 1440 -b -- %command%
+# Run the game with custom output scaling
+gamescope -W 3440 -H 1440 -- %command%
 ```
 
 ## Options
@@ -68,7 +68,6 @@ See `gamescope --help` for a full list of options.
 * `-F nis`: use NVIDIA Image Scaling v1.0.3 for upscaling
 * `-S integer`: use integer scaling.
 * `-S stretch`: use stretch scaling, the game will fill the window. (e.g. 4:3 to 16:9)
-* `-b`: create a border-less window.
 * `-f`: create a full-screen window.
 
 ## Reshade support
