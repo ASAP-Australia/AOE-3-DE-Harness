@@ -69,6 +69,7 @@ jobs:
             libdisplay-info-devel \
             catch2-devel gcovr \
             squashfs-tools fuse-libs \
+            file desktop-file-utils \
             python3 curl
 
       - uses: actions/checkout@v4
