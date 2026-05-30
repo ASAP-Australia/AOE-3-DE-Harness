@@ -77,6 +77,9 @@ jobs:
           meson setup build-f44/ \
             -Dharness=enabled \
             -Denable_gamescope_wsi_layer=false \
+            -Denable_openvr_support=false \
+            -Denable_tests=false \
+            -Dbenchmark=disabled \
             --buildtype=release \
             -Db_lto=false
           ninja -C build-f44/ AOE3DEHarness
