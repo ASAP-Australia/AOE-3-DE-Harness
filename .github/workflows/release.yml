@@ -42,6 +42,14 @@ jobs:
             pixman-devel \
             lcms2-devel \
             xorg-x11-server-Xwayland-devel \
+            libxcb-devel \
+            xcb-util-devel \
+            xcb-util-wm-devel \
+            xcb-util-errors-devel \
+            xcb-util-renderutil-devel \
+            xcb-util-image-devel \
+            xcb-util-keysyms-devel \
+            libliftoff-devel \
             wayland-devel wayland-protocols-devel \
             benchmark-devel \
             xorg-x11-server-Xwayland \
