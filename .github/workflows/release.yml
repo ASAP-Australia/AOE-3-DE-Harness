@@ -86,7 +86,7 @@ jobs:
             -Dbenchmark=disabled \
             --buildtype=release \
             -Db_lto=false
-          ninja -C build-f44/ AOE3DEHarness
+          ninja -C build-f44/ src/AOE3DEHarness
 
       - name: Build AppImage
         run: |
