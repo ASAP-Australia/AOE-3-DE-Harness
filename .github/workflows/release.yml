@@ -40,6 +40,8 @@ jobs:
             libdrm-devel \
             libinput-devel \
             pixman-devel \
+            lcms2-devel \
+            xorg-x11-server-Xwayland-devel \
             wayland-devel wayland-protocols-devel \
             benchmark-devel \
             xorg-x11-server-Xwayland \
