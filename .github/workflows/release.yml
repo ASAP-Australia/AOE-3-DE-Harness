@@ -18,9 +18,15 @@ jobs:
       contents: write
 
     steps:
-      - name: Install build dependencies
+      - name: Enable RPMFusion (for aom/dav1d/benchmark optional deps)
         run: |
           dnf install -y \
+            https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-44.noarch.rpm \
+            https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-44.noarch.rpm || true
+
+      - name: Install build dependencies
+        run: |
+          dnf install -y --skip-unavailable \
             git meson ninja-build gcc gcc-c++ clang \
             glslang \
             libcap-devel \
