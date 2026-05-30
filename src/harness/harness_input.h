@@ -23,4 +23,10 @@ bool HarnessMove( double x, double y );
 // Warp to (x,y) then press + release BTN_LEFT with ~KEY_PRESS_DELAY_MS between.
 bool HarnessClick( double x, double y );
 
+// Inject a smooth-scroll delta. dx/dy are in "logical scroll units" passed
+// directly to wlserver_mousewheel(). Convention: dy > 0 = scroll UP (matches
+// xdotool button 4); dy < 0 = scroll DOWN (matches xdotool button 5).
+// Caller should position the pointer first (HarnessMove) before calling this.
+bool HarnessWheel( double dx, double dy );
+
 } // namespace gamescope::Harness

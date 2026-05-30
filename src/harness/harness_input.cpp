@@ -237,4 +237,18 @@ bool HarnessClick( double x, double y )
     return true;
 }
 
+bool HarnessWheel( double dx, double dy )
+{
+    // dy > 0 = scroll UP (matches xdotool button 4 convention).
+    // dy < 0 = scroll DOWN (matches xdotool button 5 convention).
+    // Pass the delta directly to wlserver_mousewheel, which interprets it as
+    // a smooth-scroll delta (same units as the EIS SCROLL_DELTA path in
+    // InputEmulation.cpp:200).
+    uint32_t time_ms = get_time_in_milliseconds();
+    wlserver_lock();
+    wlserver_mousewheel( dx, dy, time_ms );
+    wlserver_unlock();
+    return true;
+}
+
 } // namespace gamescope::Harness

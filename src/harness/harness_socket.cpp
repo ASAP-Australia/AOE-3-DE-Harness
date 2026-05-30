@@ -12,6 +12,7 @@
 //   KEY VK                        — press+release
 //   MOVE X Y                      — absolute pointer warp
 //   CLICK X Y                     — move + left button press+release
+//   WHEEL DX DY                   — smooth-scroll delta; dy>0=up, dy<0=down
 //   SCREENSHOT PATH               — capture composite framebuffer to PNG at PATH
 //   SCREENSHOT_REGION X Y W H PATH — capture sub-region to PNG (logical 1920x1080 coords)
 //   PROBE_TAIL PATH               — subscribe: stream [LLP v=2] lines as "PROBE: <line>\n"
@@ -304,6 +305,31 @@ static void cmd_click( int fd, const char *args )
     send_response( fd, "OK\n" );
 }
 
+static void cmd_wheel( int fd, const char *args )
+{
+    if ( !args || !*args )
+    {
+        send_response( fd, "ERR MISSING_ARGS DX DY\n" );
+        return;
+    }
+
+    // Allow floating-point deltas (e.g. "0 -3.0") as well as integers.
+    double dx = 0.0, dy = 0.0;
+    if ( sscanf( args, "%lf %lf", &dx, &dy ) != 2 )
+    {
+        send_response( fd, "ERR BAD_COORD_FORMAT\n" );
+        return;
+    }
+
+    if ( !HarnessWheel( dx, dy ) )
+    {
+        send_response( fd, "ERR WHEEL_FAILED\n" );
+        return;
+    }
+
+    send_response( fd, "OK\n" );
+}
+
 static void cmd_screenshot_region( int fd, const char *args )
 {
     if ( !args || !*args )
@@ -587,6 +613,10 @@ static void handle_client( int conn_fd )
                     else if ( strcmp( verb, "CLICK" ) == 0 )
                     {
                         cmd_click( conn_fd, args );
+                    }
+                    else if ( strcmp( verb, "WHEEL" ) == 0 )
+                    {
+                        cmd_wheel( conn_fd, args );
                     }
                     else if ( strcmp( verb, "SCREENSHOT" ) == 0 )
                     {
