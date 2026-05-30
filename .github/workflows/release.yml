@@ -50,6 +50,10 @@ jobs:
             xcb-util-image-devel \
             xcb-util-keysyms-devel \
             libliftoff-devel \
+            mesa-libEGL-devel \
+            mesa-libgbm-devel \
+            mesa-libGLU-devel \
+            libglvnd-devel \
             wayland-devel wayland-protocols-devel \
             benchmark-devel \
             xorg-x11-server-Xwayland \
