@@ -1,8 +1,12 @@
 # AOE3DEHarness
 
-AOE3DEHarness is a fork of [gamescope](https://github.com/ValveSoftware/gamescope) that adds a
-Unix-domain control socket for cursor-free automated testing of the
-**Age of Empires III: Definitive Edition "A New World"** mod.
+**Drive Age of Empires III: Definitive Edition without ever touching your
+cursor.** AOE3DEHarness is a fork of
+[gamescope](https://github.com/ValveSoftware/gamescope) that adds a
+**Unix-domain control socket** — move, click, key, wheel and screenshot the
+game from any script, in an offscreen Xwayland sandbox, while your real
+desktop stays untouched. Mod-agnostic: it's the I/O control plane for any
+AoE3 DE automation, testing, or AI-benchmarking workflow.
 
 ## Install via AppImage (recommended)
 
@@ -22,6 +26,46 @@ The AppImage bundles all non-standard libraries (`libdisplay-info`, `libeis`,
 `libavif`, `librav1e`, `libdav1d`, `libvmaf`, etc.) so it runs on any
 x86_64 Linux with glibc 2.17+ (Ubuntu 20.04 LTS, Fedora 38+, SteamOS 3+,
 Bazzite).
+
+---
+
+## Part of a modular stack
+
+Three repos, each with one job — adopt one or all:
+
+```
+   your mod  ─────►  AoE3 DE engine  ◄─────  AOE3DEHarness  ◄─────  aoe3de-ai-simulator
+  (AI under test)   (the real game)      (this repo: I/O plane)    (deterministic AI-vs-AI farm)
+```
+
+| Repo | Does one thing |
+|---|---|
+| **AOE3DEHarness** *(here)* | Cursor-free control of the game: a Unix socket + offscreen sandbox. |
+| [aoe3de-ai-simulator](https://github.com/ASAP-Australia/AOE-3-DE-AI-Simulator) | Runs thousands of deterministic AI-vs-AI matches and reports how any AI mod plays. Uses this harness as its control plane. |
+| your mod repo | The subject under test — plugged into the simulator as a small profile. |
+
+Use the harness **standalone** to script the game, or with the simulator for
+full AI benchmarking. No repo depends on another's internals — only on this
+socket protocol.
+
+## Control socket
+
+The headline feature. After launch, the harness exposes a Unix-domain socket;
+send newline-delimited commands to control the game cursor-free:
+
+```
+MOVE <x> <y>            # warp the pointer
+CLICK <x> <y>           # move + left click
+KEY <keysym>            # key press
+KEY_DOWN / KEY_UP <k>   # held keys
+WHEEL <x> <y> <dy>      # scroll
+SCREENSHOT <path>       # passive frame grab (no cursor grab)
+STATE                   # heartbeat / status
+```
+
+This socket — not the gamescope features below — is what makes scripted,
+non-intrusive automation possible. A reference Python client
+(`HarnessClient`) lives in the consuming repos.
 
 ---
 
